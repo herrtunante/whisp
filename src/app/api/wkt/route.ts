@@ -8,6 +8,7 @@ import { LogFunction } from "@/lib/logger";
 import { withLogging } from "@/lib/hooks/withLogging";
 import { compose } from "@/utils/compose";
 import { wktToFeatureCollection } from "@/utils/wktUtils";
+import { createLog } from "@/lib/auth/db";
 
 export const POST = compose(
   withLogging,
@@ -16,6 +17,7 @@ export const POST = compose(
 )(async (req: NextRequest, log: LogFunction, body: any): Promise<NextResponse> => {
   const generateGeoids = body.generateGeoids || false;
   const { wkt } = body;
+  const userId = req.headers.get("X-User-ID");
 
   if (!wkt) return useBadRequestResponse("Missing attribute 'wkt'");
 
@@ -24,5 +26,16 @@ export const POST = compose(
 
   let featureCollection = await wktToFeatureCollection(wkt, generateGeoids) as object;
   featureCollection = { ...featureCollection, generateGeoids };
+  
+  // Log the request details if user is authenticated
+  if (userId) {
+    createLog({
+      userId,
+      endpoint: "/api/wkt",
+      requestData: JSON.stringify({ wkt: wkt.substring(0, 100) + "..." }), // Truncate WKT for log
+      responseStatus: 200,
+    });
+  }
+  
   return await analyzePlots(featureCollection, log);
 });

@@ -1,4 +1,14 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
+
+export type User = {
+    id: string;
+    email: string;
+    name: string;
+    apiToken: string;
+    createdAt: string;
+    lastLogin?: string;
+};
 
 type RecordData = {
     Geo_id: string;
@@ -22,7 +32,15 @@ type RecordData = {
     KBA: string;
 };
 
-type StoreState = {
+type AuthState = {
+    user: User | null;
+    isLoggedIn: boolean;
+    jwtToken: string;
+    login: (user: User, token: string) => void;
+    logout: () => void;
+};
+
+type DataState = {
     token: string,
     data: RecordData[],
     geometryFile: File | null,
@@ -36,7 +54,9 @@ type StoreState = {
     reset: () => void;
 };
 
-const initialState: Omit<StoreState, 'reset'> = {
+type StoreState = DataState & AuthState;
+
+const initialDataState: Omit<DataState, 'reset'> = {
     token: "",
     data: [],
     geometryFile: null,
@@ -49,7 +69,33 @@ const initialState: Omit<StoreState, 'reset'> = {
     shpBase64: ""
 };
 
-export const useStore = create<StoreState>((set) => ({
-    ...initialState,
-    reset: () => set({ ...initialState }),
-}));
+const initialAuthState: Omit<AuthState, 'login' | 'logout'> = {
+    user: null,
+    isLoggedIn: false,
+    jwtToken: "",
+};
+
+export const useStore = create<StoreState>()(
+    persist(
+        (set) => ({
+            ...initialDataState,
+            ...initialAuthState,
+            reset: () => set((state) => ({ 
+                ...initialDataState, 
+                user: state.user, 
+                isLoggedIn: state.isLoggedIn,
+                jwtToken: state.jwtToken
+            })),
+            login: (user, token) => set({ user, isLoggedIn: true, jwtToken: token }),
+            logout: () => set({ user: null, isLoggedIn: false, jwtToken: "" }),
+        }),
+        {
+            name: "whisp-storage",
+            partialize: (state) => ({ 
+                user: state.user, 
+                isLoggedIn: state.isLoggedIn, 
+                jwtToken: state.jwtToken 
+            }),
+        }
+    )
+);

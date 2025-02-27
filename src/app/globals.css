@@ -3,9 +3,9 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 255, 255, 255; /* Dark theme text color */
-  --background-start-rgb: 0, 0, 0; /* Dark theme background start */
-  --background-end-rgb: 0, 0, 0; /* Dark theme background end */
+  --foreground-rgb: 255, 255, 255; /* White text color */
+  --background-start-rgb: 10, 10, 30; /* Dark blue-black background start */
+  --background-end-rgb: 20, 20, 40; /* Dark blue-black background end */
 }
 
 body {
@@ -17,4 +17,64 @@ body {
     )
     rgb(var(--background-start-rgb));
 }
-  
+
+/* Improve code block readability */
+pre, code {
+  color: #f8f8f2; /* Light gray text for code */
+  background-color: #282a36 !important; /* Dark background for code blocks */
+}
+
+/* Override Tailwind classes for better contrast */
+.bg-gray-100 {
+  background-color: #282a36 !important; /* Dark background */
+  color: #f8f8f2 !important; /* Light text */
+  border: 1px solid #44475a; /* Subtle border */
+}
+
+.bg-white {
+  background-color: rgba(30, 30, 50, 0.8) !important; /* Dark blue with some transparency */
+  color: #f8f8f2 !important; /* Light text */
+}
+
+/* Ensure headings have good contrast */
+h1, h2, h3, h4, h5, h6 {
+  color: #f8f8f2 !important; /* Light text */
+  font-weight: 600 !important;
+  margin-bottom: 0.75rem;
+}
+
+h1 {
+  font-size: 2.25rem !important;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+}
+
+h2 {
+  font-size: 1.8rem !important;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+}
+
+h3 {
+  font-size: 1.5rem !important;
+}
+
+/* Add some highlighting for code syntax */
+.code-block {
+  padding: 1rem !important;
+}
+
+.code-block pre {
+  color: #f8f8f2 !important;
+}
+
+/* Give some accent colors to function words, strings, etc. */
+.code-block .keyword {
+  color: #ff79c6 !important; /* Pink */
+}
+
+.code-block .string {
+  color: #f1fa8c !important; /* Yellow */
+}
+
+.code-block .function {
+  color: #50fa7b !important; /* Green */
+}
