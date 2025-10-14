@@ -6,7 +6,7 @@ import json
 import time
 
 # API endpoint
-API_URL = "http://localhost:9005/analyze"
+API_URL = "http://localhost:9006/analyze"
 
 # Small test plot in Brazil
 geojson = {

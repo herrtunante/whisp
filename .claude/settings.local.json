@@ -13,7 +13,9 @@
       "Bash(curl:*)",
       "Bash(python3:*)",
       "Read(//home/alfonso/.config/earthengine/**)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(GEE_PROJECT=earthmap-289114 PYTHONPATH=/mnt/c/Users/Alfonso Sanchez-Paus/git/whisp/api:/mnt/c/Users/Alfonso Sanchez-Paus/git/whisp python3:*)",
+      "Bash(pkill:*)"
     ],
     "deny": [],
     "ask": []

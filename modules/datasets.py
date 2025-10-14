@@ -3,6 +3,41 @@ import ee
 from datetime import datetime
 from parameters.config_runtime import geometry_area_column
 
+# Global caches for frequently loaded datasets
+_GFC_IMAGE_CACHE = None
+_TMF_DEF_CACHE = None
+_TMF_DEG_CACHE = None
+_RADD_CACHE = None
+
+def get_gfc_image():
+    """Cache GFC image - loaded 6+ times across different functions"""
+    global _GFC_IMAGE_CACHE
+    if _GFC_IMAGE_CACHE is None:
+        _GFC_IMAGE_CACHE = ee.Image("UMD/hansen/global_forest_change_2023_v1_11")
+    return _GFC_IMAGE_CACHE
+
+def get_tmf_def_image():
+    """Cache TMF Deforestation image - loaded 3 times"""
+    global _TMF_DEF_CACHE
+    if _TMF_DEF_CACHE is None:
+        _TMF_DEF_CACHE = ee.ImageCollection('projects/JRC/TMF/v1_2023/DeforestationYear').mosaic()
+    return _TMF_DEF_CACHE
+
+def get_tmf_deg_image():
+    """Cache TMF Degradation image - loaded 3 times"""
+    global _TMF_DEG_CACHE
+    if _TMF_DEG_CACHE is None:
+        _TMF_DEG_CACHE = ee.ImageCollection('projects/JRC/TMF/v1_2023/DegradationYear').mosaic()
+    return _TMF_DEG_CACHE
+
+def get_radd_date_image():
+    """Cache RADD date image - loaded 3 times"""
+    global _RADD_CACHE
+    if _RADD_CACHE is None:
+        radd = ee.ImageCollection('projects/radar-wur/raddalert/v1')
+        _RADD_CACHE = radd.filterMetadata('layer', 'contains', 'alert').select('Date').mosaic()
+    return _RADD_CACHE
+
 #add datasets below
 
 
@@ -15,7 +50,7 @@ def jaxa_forest_prep():
 
 # GFC_TC_2020
 def glad_gfc_10pc_prep():
-    gfc = ee.Image("UMD/hansen/global_forest_change_2023_v1_11")
+    gfc = get_gfc_image()  # Use cached GFC image
     gfc_treecover2000 = gfc.select(['treecover2000'])
     gfc_loss2001_2020 = gfc.select(['lossyear']).lte(20)
     gfc_treecover2020 = gfc_treecover2000.where(gfc_loss2001_2020.eq(1), 0)
@@ -25,7 +60,7 @@ def glad_gfc_10pc_prep():
 def glad_pht_prep():
     primary_ht_forests2001_raw = ee.ImageCollection('UMD/GLAD/PRIMARY_HUMID_TROPICAL_FORESTS/v1')
     primary_ht_forests2001 = primary_ht_forests2001_raw.select("Primary_HT_forests").mosaic().selfMask()
-    gfc = ee.Image('UMD/hansen/global_forest_change_2023_v1_11')
+    gfc = get_gfc_image()  # Use cached GFC image
     gfc_loss2001_2020 = gfc.select(['lossyear']).lte(20)
     return primary_ht_forests2001.where(gfc_loss2001_2020.eq(1), 0).rename("GLAD_Primary")
 
@@ -68,12 +103,12 @@ def creaf_descals_palm_prep():
     return plantation_2020.rename("Oil_palm_Descals")
 
 
-#TMF_plant (plantations in 2020) 
+#TMF_plant (plantations in 2020)
 def jrc_tmf_plantation_prep():
     transition = ee.ImageCollection('projects/JRC/TMF/v1_2023/TransitionMap_Subtypes').mosaic()
-    deforestation_year = ee.ImageCollection('projects/JRC/TMF/v1_2023/DeforestationYear').mosaic()
+    deforestation_year = get_tmf_def_image()  # Use cached TMF deforestation image
     plantation = (transition.gte(81)).And(transition.lte(86))
-    plantation_2020 = plantation.where(deforestation_year.gte(2021),0) # update from https://github.com/forestdatapartnership/whisp/issues/42 
+    plantation_2020 = plantation.where(deforestation_year.gte(2021),0) # update from https://github.com/forestdatapartnership/whisp/issues/42
     return plantation_2020.rename("TMF_plant");
     
 # Cocoa_ETH
@@ -134,14 +169,12 @@ def rbge_rubber_prep():
 # RADD_year_2019 to RADD_year_< current year >
 def radd_year_prep():
     from datetime import datetime
-    radd = ee.ImageCollection('projects/radar-wur/raddalert/v1')
-    
-    radd_date = radd.filterMetadata('layer', 'contains', 'alert').select('Date').mosaic()
-    # date of avaialbility 
+    radd_date = get_radd_date_image()  # Use cached RADD date image
+    # date of avaialbility
     start_year = 19 ## (starts 2019 in Africa, then 2020 for S America and Asia: https://data.globalforestwatch.org/datasets/gfw::deforestation-alerts-radd/about
-        
-    current_year = datetime.now().year % 100 # NB the % 100 part gets last two digits needed 
-        
+
+    current_year = datetime.now().year % 100 # NB the % 100 part gets last two digits needed
+
     img_stack = None
     # Generate an image based on GFC with one band of forest tree loss per year from 2001 to 2022
     for year in range(start_year, current_year +1 ):
@@ -149,7 +182,7 @@ def radd_year_prep():
         start = year*1000
         end  = year*1000+365
         radd_year = radd_date.updateMask(radd_date.gte(start)).updateMask(radd_date.lte(end)).gt(0).rename("RADD_year_" +"20"+ str(year))
-        
+
         if img_stack is None:
             img_stack = radd_year
         else:
@@ -159,84 +192,133 @@ def radd_year_prep():
 # TMF_def_2000 to TMF_def_2023
 def tmf_def_per_year_prep():
     # Load the TMF Deforestation annual product
-    tmf_def   = ee.ImageCollection('projects/JRC/TMF/v1_2023/DeforestationYear').mosaic()
-    img_stack = None
-    # Generate an image based on GFC with one band of forest tree loss per year from 2001 to 2022
-    for i in range(0, 23 +1):
-        tmf_def_year = tmf_def.eq(2000+i).rename("TMF_def_" + str(2000+i))
-        if img_stack is None:
-            img_stack = tmf_def_year
-        else:
-            img_stack = img_stack.addBands(tmf_def_year)
-    return img_stack
+    tmf_def = get_tmf_def_image()  # Use cached TMF deforestation image
+    start_year = 2000
+    end_year = 2023
+    years = ee.List.sequence(start_year, end_year)
+
+    def build_year_band(year):
+        year = ee.Number(year).toInt()
+        return tmf_def.eq(year).rename(ee.String("TMF_def_").cat(year.format()))
+
+    first_band = build_year_band(years.get(0))
+
+    def add_band(year, accumulator):
+        return ee.Image(accumulator).addBands(build_year_band(year))
+
+    stacked = ee.Image(years.slice(1).iterate(add_band, first_band))
+    return stacked
 
 
-# TMF_deg_2000 to TMF_deg_2023 
+# TMF_deg_2000 to TMF_deg_2023
 def tmf_deg_per_year_prep():
     # Load the TMF Degradation annual product
-    tmf_def   = ee.ImageCollection('projects/JRC/TMF/v1_2023/DegradationYear').mosaic()
-    img_stack = None
-    # Generate an image based on GFC with one band of forest tree loss per year from 2001 to 2022
-    for i in range(0, 23 +1):
-        tmf_def_year = tmf_def.eq(2000+i).rename("TMF_deg_" + str(2000+i))
-        if img_stack is None:
-            img_stack = tmf_def_year
-        else:
-            img_stack = img_stack.addBands(tmf_def_year)
-    return img_stack
+    tmf_deg = get_tmf_deg_image()  # Use cached TMF degradation image
+    start_year = 2000
+    end_year = 2023
+    years = ee.List.sequence(start_year, end_year)
+
+    def build_year_band(year):
+        year = ee.Number(year).toInt()
+        return tmf_deg.eq(year).rename(ee.String("TMF_deg_").cat(year.format()))
+
+    first_band = build_year_band(years.get(0))
+
+    def add_band(year, accumulator):
+        return ee.Image(accumulator).addBands(build_year_band(year))
+
+    stacked = ee.Image(years.slice(1).iterate(add_band, first_band))
+    return stacked
 
    
 # GFC_loss_year_2001 to GFC_loss_year_2023 (correct for version 11)
 def glad_gfc_loss_per_year_prep():
     # Load the Global Forest Change dataset
-    gfc = ee.Image("UMD/hansen/global_forest_change_2023_v1_11")
-    img_stack = None
-    # Generate an image based on GFC with one band of forest tree loss per year from 2001 to 2022
-    for i in range(1, 23 +1):
-        gfc_loss_year = gfc.select(['lossyear']).eq(i).And(gfc.select(['treecover2000']).gt(10))
-        gfc_loss_year = gfc_loss_year.rename("GFC_loss_year_" + str(2000+i))
-        if img_stack is None:
-            img_stack = gfc_loss_year
-        else:
-            img_stack = img_stack.addBands(gfc_loss_year)
-    return img_stack
+    gfc = get_gfc_image()  # Use cached GFC image
+    loss_year = gfc.select(['lossyear'])
+    treecover = gfc.select(['treecover2000'])
+
+    start_year = 1  # Year code for 2001
+    end_year = 23   # Year code for 2023
+    years = ee.List.sequence(start_year, end_year)
+
+    def build_year_band(year_code):
+        year_code = ee.Number(year_code).toInt()
+        actual_year = year_code.add(2000)
+        return (
+            loss_year.eq(year_code)
+            .And(treecover.gt(10))
+            .rename(ee.String("GFC_loss_year_").cat(actual_year.format()))
+        )
+
+    first_band = build_year_band(years.get(0))
+
+    def add_band(year_code, accumulator):
+        return ee.Image(accumulator).addBands(build_year_band(year_code))
+
+    stacked = ee.Image(years.slice(1).iterate(add_band, first_band))
+    return stacked
 
 
 def modis_fire_prep():
     modis_fire = ee.ImageCollection("MODIS/061/MCD64A1")
     start_year = 2000
 
-    # Determine the last available year by checking the latest image in the collection
-    last_image = modis_fire.sort('system:time_start', False).first()
-    last_date = ee.Date(last_image.get('system:time_start'))
-    end_year = last_date.get('year').getInfo()
+    # Keep everything server-side by deriving the last year directly in EE
+    max_time = modis_fire.aggregate_max('system:time_start')
+    end_year = ee.Number(
+        ee.Algorithms.If(max_time, ee.Date(max_time).get('year'), start_year)
+    )
+    years = ee.List.sequence(start_year, end_year)
 
-    img_stack = None
+    def build_year_image(year):
+        year = ee.Number(year).toInt()
+        start_date = ee.Date.fromYMD(year, 1, 1)
+        end_date = start_date.advance(1, 'year')
+        return (
+            modis_fire.filterDate(start_date, end_date)
+            .mosaic()
+            .select(['BurnDate'])
+            .gte(0)
+            .rename(ee.String("MODIS_fire_").cat(year.format()))
+        )
 
-    for year in range(start_year, end_year + 1):
-        date_st = f"{year}-01-01"
-        date_ed = f"{year}-12-31"
-        modis_year = modis_fire.filterDate(date_st, date_ed).mosaic().select(['BurnDate']).gte(0).rename(f"MODIS_fire_{year}")
-        img_stack = modis_year if img_stack is None else img_stack.addBands(modis_year)
+    first_image = build_year_image(years.get(0))
 
-    return img_stack
+    def add_band(year, accumulator):
+        # In ee.List.iterate(), the current list item comes first, then the accumulator
+        return ee.Image(accumulator).addBands(build_year_image(year))
+
+    stacked = ee.Image(years.slice(1).iterate(add_band, first_image))
+    return stacked
 
 
-# ESA_fire_2000 to ESA_fire_2020
+# ESA_fire_2001 to ESA_fire_2020
 def esa_fire_prep():
     esa_fire = ee.ImageCollection("ESA/CCI/FireCCI/5_1")
-    img_stack = None
-    for year in range(2001, 2020 +1):
-        date_st = str(year) + "-01-01"
-        date_ed = str(year) + "-12-31"
-        #print(date_st)
-        esa_year = esa_fire.filterDate(date_st,date_ed).mosaic().select(['BurnDate']).gte(0).rename("ESA_fire_" + str(year))
-        
-        if img_stack is None:
-            img_stack = esa_year
-        else:
-            img_stack = img_stack.addBands(esa_year)
-    return img_stack
+    start_year = 2001
+    end_year = 2020
+    years = ee.List.sequence(start_year, end_year)
+
+    def build_year_image(year):
+        year = ee.Number(year).toInt()
+        start_date = ee.Date.fromYMD(year, 1, 1)
+        end_date = start_date.advance(1, 'year')
+        return (
+            esa_fire.filterDate(start_date, end_date)
+            .mosaic()
+            .select(['BurnDate'])
+            .gte(0)
+            .rename(ee.String("ESA_fire_").cat(year.format()))
+        )
+
+    first_image = build_year_image(years.get(0))
+
+    def add_band(year, accumulator):
+        return ee.Image(accumulator).addBands(build_year_image(year))
+
+    stacked = ee.Image(years.slice(1).iterate(add_band, first_image))
+    return stacked
 
 
 
@@ -245,13 +327,11 @@ def esa_fire_prep():
 # RADD_after_2020
 def radd_after_2020_prep():
     from datetime import datetime
-    radd = ee.ImageCollection('projects/radar-wur/raddalert/v1')
-    
-    radd_date = radd.filterMetadata('layer', 'contains', 'alert').select('Date').mosaic()
-    # date of avaialbility 
+    radd_date = get_radd_date_image()  # Use cached RADD date image
+    # date of avaialbility
     start_year = 21 ## (starts 2019 in Africa, then 2020 for S America and Asia: https://data.globalforestwatch.org/datasets/gfw::deforestation-alerts-radd/about)
-        
-    current_year = datetime.now().year % 100 # NB the % 100 part gets last two digits needed        
+
+    current_year = datetime.now().year % 100 # NB the % 100 part gets last two digits needed
     start = start_year*1000
     end  = current_year*1000+365
     return radd_date.updateMask(radd_date.gte(start)).updateMask(radd_date.lte(end)).gt(0).rename("RADD_after_2020")
@@ -260,14 +340,12 @@ def radd_after_2020_prep():
 # RADD_before_2020
 def radd_before_2020_prep():
     from datetime import datetime
-    radd = ee.ImageCollection('projects/radar-wur/raddalert/v1')
-    
-    radd_date = radd.filterMetadata('layer', 'contains', 'alert').select('Date').mosaic()
-    # date of avaialbility 
+    radd_date = get_radd_date_image()  # Use cached RADD date image
+    # date of avaialbility
     start_year = 19 ## (starts 2019 in Africa, then 2020 for S America and Asia: https://data.globalforestwatch.org/datasets/gfw::deforestation-alerts-radd/about)
-        
-    # current_year = datetime.now().year % 100 # NB the % 100 part gets last two digits needed 
-    
+
+    # current_year = datetime.now().year % 100 # NB the % 100 part gets last two digits needed
+
     start = start_year*1000
     end  = 20*1000+365
     return radd_date.updateMask(radd_date.gte(start)).updateMask(radd_date.lte(end)).gt(0).rename("RADD_before_2020")
@@ -275,35 +353,35 @@ def radd_before_2020_prep():
 
 #TMF_deg_before_2020
 def tmf_deg_before_2020_prep():
-    tmf_deg = ee.ImageCollection('projects/JRC/TMF/v1_2023/DegradationYear').mosaic()
+    tmf_deg = get_tmf_deg_image()  # Use cached TMF degradation image
     return (tmf_deg.lte(2020)).And(tmf_deg.gte(2000)).rename("TMF_deg_before_2020")
 
 #TMF_deg_after_2020
 def tmf_deg_after_2020_prep():
-    tmf_deg = ee.ImageCollection('projects/JRC/TMF/v1_2023/DegradationYear').mosaic()
+    tmf_deg = get_tmf_deg_image()  # Use cached TMF degradation image
     return tmf_deg.gt(2020).rename("TMF_deg_after_2020")
 
 #tmf_def_before_2020
 def tmf_def_before_2020_prep():
-    tmf_def = ee.ImageCollection('projects/JRC/TMF/v1_2023/DeforestationYear').mosaic()
+    tmf_def = get_tmf_def_image()  # Use cached TMF deforestation image
     return (tmf_def.lte(2020)).And(tmf_def.gte(2000)).rename("TMF_def_before_2020")
 
 #tmf_def_after_2020
 def tmf_def_after_2020_prep():
-    tmf_def = ee.ImageCollection('projects/JRC/TMF/v1_2023/DeforestationYear').mosaic()
+    tmf_def = get_tmf_def_image()  # Use cached TMF deforestation image
     return tmf_def.gt(2020).rename("TMF_def_after_2020")
 
 # GFC_loss_before_2020 (loss within 10 percent cover; includes 2020; correct for version 11)
 def glad_gfc_loss_before_2020_prep():
     # Load the Global Forest Change dataset
-    gfc = ee.Image("UMD/hansen/global_forest_change_2023_v1_11")
+    gfc = get_gfc_image()  # Use cached GFC image
     gfc_loss = gfc.select(['lossyear']).lte(20).And(gfc.select(['treecover2000']).gt(10))
     return gfc_loss.rename("GFC_loss_before_2020")
     
 # GFC_loss_after_2020 (loss within 10 percent cover; correct for version 11)
 def glad_gfc_loss_after_2020_prep():
     # Load the Global Forest Change dataset
-    gfc = ee.Image("UMD/hansen/global_forest_change_2023_v1_11")
+    gfc = get_gfc_image()  # Use cached GFC image
     gfc_loss = gfc.select(['lossyear']).gt(20).And(gfc.select(['treecover2000']).gt(10))
     return gfc_loss.rename("GFC_loss_after_2020")
 
@@ -345,26 +423,20 @@ def feat_coll_prep(feats_name,attr_name, base_name):
     feats_poly    = ee.FeatureCollection(feats_name);
     
     ## Create unique list of values for selected attribute column
-    list_types    = feats_poly.distinct(attr_name).aggregate_array(attr_name)
-    list_length   = ee.Number(list_types.length()).toInt().getInfo()
-    
-    ## Initialize blank raster
-    img_stack = None
+    list_types    = ee.List(feats_poly.distinct(attr_name).aggregate_array(attr_name))
+    list_indices  = ee.List.sequence(0, list_types.size().subtract(1))
 
-    ## Add one band for each attribute values
-    for i in range(0, list_length ):
-        attr_type = list_types.get(i)
-       
-        feats_filter  = feats_poly.filter(ee.Filter.eq(attr_name,attr_type))
-        feats_overlap = ee.Image().paint(feats_filter,1)
-        feats_binary  = feats_overlap.gt(0).rename(base_name + "_" + str(i))
+    def paint_type(index):
+        index = ee.Number(index).toInt()
+        attr_value = list_types.get(index)
+        feats_filter  = feats_poly.filter(ee.Filter.eq(attr_name, attr_value))
+        feats_overlap = ee.Image().paint(feats_filter, 1)
+        band_name = ee.String(base_name).cat("_").cat(index.format())
+        return feats_overlap.gt(0).rename(band_name)
 
-        if img_stack is None:
-            img_stack = feats_binary
-        else:
-            img_stack = img_stack.addBands(feats_binary)
-    
-    return img_stack    #,list_types
+    img_collection = ee.ImageCollection(list_indices.map(paint_type))
+
+    return ee.Image(img_collection.toBands())    #,list_types
 
 
 # WDPA 

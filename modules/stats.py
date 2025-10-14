@@ -7,6 +7,26 @@ from parameters.config_runtime import percent_or_ha, plot_id_column, geometry_ty
 import functools
 
 
+_COMBINED_IMAGE_CACHE = None
+_WATER_FLAG_IMAGE_CACHE = None
+
+
+def get_combined_image():
+    """Lazy-load combined dataset image so it is built once per process."""
+    global _COMBINED_IMAGE_CACHE
+    if _COMBINED_IMAGE_CACHE is None:
+        _COMBINED_IMAGE_CACHE = combine_datasets()
+    return _COMBINED_IMAGE_CACHE
+
+
+def get_water_flag_image():
+    """Lazy-load water flag image to avoid repainting coastlines per feature."""
+    global _WATER_FLAG_IMAGE_CACHE
+    if _WATER_FLAG_IMAGE_CACHE is None:
+        _WATER_FLAG_IMAGE_CACHE = water_flag_all_prep()
+    return _WATER_FLAG_IMAGE_CACHE
+
+
 ########################################
 ### geoboundaries - freqently updated database, allows commercial use (CC BY 4.0 DEED) (disputed territories may need checking)
 
@@ -104,7 +124,13 @@ def get_stats(feature_or_feature_col):
 
 
 def get_stats_fc(feature_col):
-    return ee.FeatureCollection(feature_col.map(get_stats_feature))
+    img_combined = get_combined_image()
+    water_image = get_water_flag_image()
+
+    def map_feature(feature):
+        return get_stats_feature(feature, img_combined, water_image)
+
+    return ee.FeatureCollection(feature_col.map(map_feature))
 
 
 
@@ -122,9 +148,12 @@ def percent_and_format(val,area_ha):
     # Return the formatted value
     return ee.Number(formatted_value)
 
-def get_stats_feature(feature):
+def get_stats_feature(feature, img_combined=None, water_all=None):
     
-    img_combined = combine_datasets() #imported function
+    if img_combined is None:
+        img_combined = get_combined_image()
+    if water_all is None:
+        water_all = get_water_flag_image()
 
     reduce = img_combined.reduceRegion(
         reducer=ee.Reducer.sum(), 
@@ -156,10 +185,8 @@ def get_stats_feature(feature):
     location = ee.Dictionary(get_geoboundaries_info(centroid))
     
     country = ee.Dictionary({country_column: location.get('shapeGroup')})
-
-    admin_1 = ee.Dictionary({admin_1_column: location.get('shapeName')}) # if running adm1
     
-    water_all = water_flag_all_prep()
+    admin_1 = ee.Dictionary({admin_1_column: location.get('shapeName')}) # if running adm1
     
     water_flag_dict = value_at_point_flag(centroid,water_all,"water_flag",water_flag)
     
@@ -415,4 +442,3 @@ def copy_properties_and_exclude(feature,exclude_properties):
 #     property_names = first_feature.propertyNames().getInfo()
 #     new_property_names = [prop.replace('_', ' ') for prop in property_names]
 #     return feature.select(property_names, new_property_names)
-
