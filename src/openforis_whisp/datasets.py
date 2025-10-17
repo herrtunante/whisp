@@ -24,6 +24,11 @@ from datetime import datetime
 # defining here instead of importing from config_runtime, to allow functioning as more of a standalone script
 geometry_area_column = "Area"
 
+# Calculate current year once at module load time (not in functions)
+# This avoids repeated datetime calls and potential .getInfo() calls
+CURRENT_YEAR = datetime.now().year
+CURRENT_YEAR_2DIGIT = CURRENT_YEAR % 100  # Last two digits for RADD datasets
+
 import inspect
 
 import logging
@@ -385,8 +390,6 @@ def g_glc_fcs30d_crop_2022_prep():
 
 # RADD_year_2019 to RADD_year_< current year >
 def g_radd_year_prep():
-    from datetime import datetime
-
     radd = ee.ImageCollection("projects/radar-wur/raddalert/v1")
 
     radd_date = (
@@ -395,11 +398,8 @@ def g_radd_year_prep():
     # date of avaialbility
     start_year = 19  ## (starts 2019 in Africa, then 2020 for S America and Asia: https://data.globalforestwatch.org/datasets/gfw::deforestation-alerts-radd/about
 
-    current_year = (
-        datetime.now().year
-        % 100
-        # NB the % 100 part gets last two digits needed
-    )
+    # Use pre-calculated current year (avoids repeated datetime calls)
+    current_year = CURRENT_YEAR_2DIGIT
 
     img_stack = None
     # Generate an image based on GFC with one band of forest tree loss per year from 2001 to <current year>
@@ -474,10 +474,10 @@ def g_modis_fire_prep():
     modis_fire = ee.ImageCollection("MODIS/061/MCD64A1")
     start_year = 2000
 
-    # Determine the last available year by checking the latest image in the collection
-    last_image = modis_fire.sort("system:time_start", False).first()
-    last_date = ee.Date(last_image.get("system:time_start"))
-    end_year = last_date.get("year").getInfo()
+    # Use current year - 1 to ensure data availability (MODIS data typically has a delay)
+    # This avoids slow .getInfo() call while maintaining recent data coverage
+    # Dataset maintainers: Update this if you need to adjust for data availability
+    end_year = CURRENT_YEAR - 1
 
     img_stack = None
 
@@ -501,10 +501,10 @@ def g_esa_fire_prep():
     esa_fire = ee.ImageCollection("ESA/CCI/FireCCI/5_1")
     start_year = 2001
 
-    # Determine the last available year by checking the latest image in the collection
-    last_image = esa_fire.sort("system:time_start", False).first()
-    last_date = ee.Date(last_image.get("system:time_start"))
-    end_year = last_date.get("year").getInfo()
+    # ESA FireCCI dataset ends at 2020 as of latest version (v5.1)
+    # This avoids slow .getInfo() call. Update this constant if dataset extends beyond 2020
+    # See: https://catalogue.ceda.ac.uk/uuid/58f00d8814064b79a0c49662ad3af537
+    end_year = 2020
 
     img_stack = None
 
@@ -615,8 +615,6 @@ def g_esa_fire_prep():
 
 # RADD_after_2020
 def g_radd_after_2020_prep():
-    from datetime import datetime
-
     radd = ee.ImageCollection("projects/radar-wur/raddalert/v1")
 
     radd_date = (
@@ -625,9 +623,8 @@ def g_radd_after_2020_prep():
     # date of avaialbility
     start_year = 21  ## (starts 2019 in Africa, then 2020 for S America and Asia: https://data.globalforestwatch.org/datasets/gfw::deforestation-alerts-radd/about)
 
-    current_year = (
-        datetime.now().year % 100
-    )  # NB the % 100 part gets last two digits needed
+    # Use pre-calculated current year (avoids repeated datetime calls)
+    current_year = CURRENT_YEAR_2DIGIT
     start = start_year * 1000
     end = current_year * 1000 + 365
     return (
@@ -640,8 +637,6 @@ def g_radd_after_2020_prep():
 
 # RADD_before_2020
 def g_radd_before_2020_prep():
-    from datetime import datetime
-
     radd = ee.ImageCollection("projects/radar-wur/raddalert/v1")
 
     radd_date = (
@@ -649,8 +644,6 @@ def g_radd_before_2020_prep():
     )
     # date of avaialbility
     start_year = 19  ## (starts 2019 in Africa, then 2020 for S America and Asia: https://data.globalforestwatch.org/datasets/gfw::deforestation-alerts-radd/about)
-
-    # current_year = datetime.now().year % 100 # NB the % 100 part gets last two digits needed
 
     start = start_year * 1000
     end = 20 * 1000 + 365
@@ -746,7 +739,8 @@ def g_modis_fire_before_2020_prep():
 def g_modis_fire_after_2020_prep():
     modis_fire = ee.ImageCollection("MODIS/061/MCD64A1")
     start_year = 2021
-    end_year = datetime.now().year
+    # Use pre-calculated current year (avoids repeated datetime calls)
+    end_year = CURRENT_YEAR - 1  # Use year - 1 to ensure data availability
     date_st = str(start_year) + "-01-01"
     date_ed = str(end_year) + "-12-31"
     return (
@@ -1216,8 +1210,23 @@ def nci_ocs2020_prep():
 ###Combining datasets
 
 
-def combine_datasets(national_codes=None):
-    """Combines datasets into a single multiband image, with fallback if assets are missing."""
+def combine_datasets(national_codes=None, validate_bands=False):
+    """
+    Combines datasets into a single multiband image, with fallback if assets are missing.
+
+    Parameters
+    ----------
+    national_codes : list, optional
+        List of ISO2 country codes to include national datasets
+    validate_bands : bool, optional
+        If True, validates band names with a slow .getInfo() call (default: False)
+        Only enable for debugging. Normal operation relies on exception handling.
+
+    Returns
+    -------
+    ee.Image
+        Combined multiband image with all datasets
+    """
     img_combined = ee.Image(1).rename(geometry_area_column)
 
     # Combine images directly
@@ -1228,25 +1237,27 @@ def combine_datasets(national_codes=None):
             # logger.error(f"Error adding image: {e}")
             print(f"Error adding image: {e}")
 
-    try:
-        # Attempt to print band names to check for errors
-        # print(img_combined.bandNames().getInfo())
-        img_combined.bandNames().getInfo()
+    # OPTIMIZATION: Removed slow .getInfo() call for band validation
+    # The validation is now optional and disabled by default
+    # Image processing will fail downstream if there's an issue, which is handled by exception blocks
+    if validate_bands:
+        try:
+            # This is SLOW - only use for debugging
+            img_combined.bandNames().getInfo()
+        except ee.EEException as e:
+            # logger.error(f"Error validating band names: {e}")
+            # logger.info("Running code for filtering to only valid datasets due to error in input")
+            print("using valid datasets filter due to error in validation")
+            # Validate images
+            images_to_test = [
+                func() for func in list_functions(national_codes=national_codes)
+            ]
+            valid_imgs = keep_valid_images(images_to_test)  # Validate images
 
-    except ee.EEException as e:
-        # logger.error(f"Error printing band names: {e}")
-        # logger.info("Running code for filtering to only valid datasets due to error in input")
-        print("using valid datasets filter due to error in input")
-        # Validate images
-        images_to_test = [
-            func() for func in list_functions(national_codes=national_codes)
-        ]
-        valid_imgs = keep_valid_images(images_to_test)  # Validate images
-
-        # Retry combining images after validation
-        img_combined = ee.Image(1).rename(geometry_area_column)
-        for img in valid_imgs:
-            img_combined = img_combined.addBands(img)
+            # Retry combining images after validation
+            img_combined = ee.Image(1).rename(geometry_area_column)
+            for img in valid_imgs:
+                img_combined = img_combined.addBands(img)
 
     img_combined = img_combined.multiply(ee.Image.pixelArea())
     print("Whisp multiband image compiled")

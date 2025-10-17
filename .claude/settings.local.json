@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(poetry install:*)",
+      "Bash(pip3 install:*)",
+      "Bash(source .venv/bin/activate)",
+      "Bash(pip install:*)",
+      "Bash(PYTHONPATH=/mnt/c/Users/sanch/git/whispFDAP_MainRepo/src:$PYTHONPATH python3:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
