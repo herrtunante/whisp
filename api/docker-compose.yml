@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  whisp-api:
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+    container_name: whisp-api
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount the entire Whisp project for development
+      - ..:/whisp
+      # Mount GEE credentials if using service account
+      # - ~/.config/earthengine:/root/.config/earthengine:ro
+    environment:
+      # Set from .env file or override here
+      - GEE_PROJECT=${GEE_PROJECT}
+      - API_TITLE=${API_TITLE:-Whisp API}
+      - API_VERSION=${API_VERSION:-1.0.0}
+      - HOST=${HOST:-0.0.0.0}
+      - PORT=${PORT:-8000}
+      - RELOAD=${RELOAD:-True}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - WHISP_THRESHOLD_TO_DRIVE=${WHISP_THRESHOLD_TO_DRIVE:-500}
+      - DEFAULT_IND_1_THRESHOLD=${DEFAULT_IND_1_THRESHOLD:-10.0}
+      - DEFAULT_IND_2_THRESHOLD=${DEFAULT_IND_2_THRESHOLD:-10.0}
+      - DEFAULT_IND_3_THRESHOLD=${DEFAULT_IND_3_THRESHOLD:-0.0}
+      - DEFAULT_IND_4_THRESHOLD=${DEFAULT_IND_4_THRESHOLD:-0.0}
+    env_file:
+      - .env
+    restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

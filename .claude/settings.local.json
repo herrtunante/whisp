@@ -8,7 +8,22 @@
       "Bash(pip3 install:*)",
       "Bash(source .venv/bin/activate)",
       "Bash(pip install:*)",
-      "Bash(PYTHONPATH=/mnt/c/Users/sanch/git/whispFDAP_MainRepo/src:$PYTHONPATH python3:*)"
+      "Bash(PYTHONPATH=/mnt/c/Users/sanch/git/whispFDAP_MainRepo/src:$PYTHONPATH python3:*)",
+      "Read(//mnt/c/Users/**)",
+      "Bash(chmod:*)",
+      "Bash(cd:*)",
+      "Bash(pip3 install:*)",
+      "Bash(python3 -m pip:*)",
+      "Bash(sudo apt-get:*)",
+      "Bash(sudo apt-get install:*)",
+      "Bash(PYTHONPATH=/mnt/c/Users/Alfonso Sanchez-Paus/git/whisp:/mnt/c/Users/Alfonso Sanchez-Paus/git/whisp/api python3:*)",
+      "Bash(PYTHONPATH=/mnt/c/Users/Alfonso Sanchez-Paus/git/whisp/api:/mnt/c/Users/Alfonso Sanchez-Paus/git/whisp python3 -m uvicorn api.app.main:app --host 0.0.0.0 --port 9005 --reload)",
+      "Bash(curl:*)",
+      "Bash(python3:*)",
+      "Read(//home/alfonso/.config/earthengine/**)",
+      "Bash(cat:*)",
+      "Bash(GEE_PROJECT=earthmap-289114 PYTHONPATH=/mnt/c/Users/Alfonso Sanchez-Paus/git/whisp/api:/mnt/c/Users/Alfonso Sanchez-Paus/git/whisp python3:*)",
+      "Bash(pkill:*)"
     ],
     "deny": [],
     "ask": []
