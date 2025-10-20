@@ -24,6 +24,7 @@
   - [Whisp notebooks](#whisp_notebooks)
   - [Add data layers](#whisp_add_data)
   - [Contribute to the code](#whisp_contribute)
+  - [Running load tests](#whisp_load_tests)
   - [Code of conduct](#whisp_conduct)
 
   <br>
@@ -304,6 +305,86 @@ You should be able to run the Pytest suite by simply running the `pytest` comman
 
 
 Please read the [contributing guidelines](contributing_guidelines.md) for good practice recommendations
+
+
+## Running Load Tests <a name="whisp_load_tests"></a>
+
+Whisp includes load testing tools to help evaluate performance under different workloads. There are two types of load tests available:
+
+### 1. API Load Test
+
+Tests the Whisp API's performance with concurrent requests to help understand throughput and response time degradation.
+
+**Prerequisites:**
+- API server running locally (see [API README](api/README.md))
+- Python dependencies installed
+
+**To run:**
+
+```bash
+# Start the API server first (in a separate terminal)
+cd api
+python -m uvicorn app.main:app --host 0.0.0.0 --port 9006
+
+# Run the load test (in another terminal)
+python api/tests/test_load.py
+```
+
+**What it tests:**
+- Sequential baseline (5 requests)
+- Low concurrency (5 requests, 2 workers)
+- Medium concurrency (10 requests, 5 workers)
+- High concurrency (10 requests, 10 workers)
+- Stress test (20 requests, 10 workers)
+
+**Output includes:**
+- Response times (min, max, avg, median, percentiles)
+- Success/failure rates
+- Throughput (requests per second)
+- Performance degradation with increased concurrency
+
+### 2. Code Performance Comparison Test
+
+Compares the performance of optimized code against the original implementation to measure improvements.
+
+**Prerequisites:**
+- Original code checked out in a git worktree
+- Python dependencies installed
+- Google Earth Engine authenticated
+
+**Setup:**
+
+```bash
+# Create a git worktree with the original code (commit 9d356ae)
+git worktree add /tmp/whisp_original_checkout 9d356ae
+```
+
+**To run:**
+
+```bash
+python tests/helpers/test_load_comparison.py
+```
+
+**What it tests:**
+- Processes varying numbers of features (1, 5, 10, 20, 36)
+- Compares execution time for original vs optimized code
+- Measures time saved and speedup factor
+
+**Output includes:**
+- Side-by-side comparison of processing times
+- Percentage improvement
+- Total time saved
+- Overall speedup factor
+
+### Interpreting Results
+
+Load test results help identify:
+- Optimal concurrency levels for production deployments
+- Google Earth Engine rate limit impacts
+- Areas for further optimization
+- Expected response times under load
+
+For production deployments handling high volumes, consider implementing a queue system to manage request concurrency and stay within GEE quota limits.
 
 
   ## Code of Conduct <a name="whisp_conduct"></a>
